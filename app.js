@@ -50,6 +50,10 @@ function sleep(ms) {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.get('/', (req, res) => {
+  res.send(`<!DOCTYPE html><html><head><title>BotVPN 1FORCR</title></head><body style="font-family:sans-serif;max-width:600px;margin:40px auto;padding:20px"><h1>BotVPN 1FORCR</h1><p>Telegram bot untuk manajemen layanan VPN.</p><p><strong>Status:</strong> ${vars.BOT_TOKEN ? '🟢 Bot Configured' : '🔴 BOT_TOKEN belum di-set di .vars.json'}</p><p>Edit file <code>.vars.json</code> untuk mengkonfigurasi bot Anda.</p></body></html>`);
+});
+
 const {
   createssh,
   createvmess,
@@ -721,7 +725,7 @@ const broadcastSessions = {};
 let lastBroadcastInfo = null;
 
 // Inisialisasi bot
-const bot = new Telegraf(BOT_TOKEN);
+const bot = new Telegraf(BOT_TOKEN || 'placeholder:token_not_configured');
 
 // ==== Helper: konversi Markdown lama -> HTML aman ====
 function mdToHtml(text) {
@@ -1500,7 +1504,7 @@ async function creditDeposit(uniqueCode, bot, db, logger) {
 }
 
 async function pollMutasi(bot, db, logger, axios) {
-	  // ===== ANTI SPAM 469 (COOLDOWN) =====
+          // ===== ANTI SPAM 469 (COOLDOWN) =====
   global.mutasiBlockedUntil = global.mutasiBlockedUntil || 0;
   if (Date.now() < global.mutasiBlockedUntil) return;
 
@@ -1807,7 +1811,7 @@ function ensurePrivateChat(ctx) {
 }
 
 bot.command(['start', 'menu'], async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   logger.info('Start or Menu command received');
   const chatType = ctx.chat?.type;
@@ -1872,7 +1876,7 @@ async function openTopupQrisMenu(ctx) {
 // ===== END SECTION: PAYMENT - UI TOPUP SALDO OTOMATIS (QRIS) ================
 
 bot.command('testgroup', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   // Hanya admin yang boleh pakai perintah ini
   if (!ctx.from || !adminIds.includes(ctx.from.id)) {
@@ -1890,7 +1894,7 @@ bot.command('testgroup', async (ctx) => {
 
 
 bot.command('daily_report_test', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   if (!ctx.from || ctx.from.id !== MASTER_ID) {
     return ctx.reply(MASTER_ONLY_MESSAGE, { parse_mode: 'HTML' });
@@ -1903,7 +1907,7 @@ bot.command('daily_report_test', async (ctx) => {
 // Command: /expired_reminder_test
 // Kirim preview pengingat expired ke si pemanggil command
 bot.command('expired_reminder_test', (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   if (!ctx.from) return;
 
@@ -2000,7 +2004,7 @@ bot.command('expired_reminder_test', (ctx) => {
 
 // Test backup otomatis secara manual
 bot.command('backup_auto_test', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   if (!ctx.from || ctx.from.id !== MASTER_ID) {
     return ctx.reply(MASTER_ONLY_MESSAGE, { parse_mode: 'HTML' });
@@ -2013,7 +2017,7 @@ bot.command('backup_auto_test', async (ctx) => {
 // Command: /lisensi
 // Menampilkan info masa aktif bot (expire date & sisa hari)
 bot.command('lisensi', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
    if (!ctx.from || !ADMIN_IDS.includes(ctx.from.id)) {
     return ctx.reply(NO_ACCESS_MESSAGE, { parse_mode: 'HTML' });
@@ -2062,7 +2066,7 @@ bot.command('lisensi', async (ctx) => {
 // Command: /health
 // Cek kesehatan bot: lisensi, database, backup, laporan harian, pengingat expired
 bot.command('health', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   if (!ctx.from || !ADMIN_IDS.includes(ctx.from.id)) {
     return ctx.reply(NO_ACCESS_MESSAGE, { parse_mode: 'HTML' });
@@ -2176,7 +2180,7 @@ bot.command('health', async (ctx) => {
 // Command: /addhari <jumlah_hari>
 // Menambah masa aktif lisensi bot
 bot.command('addhari', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   if (!ctx.from || ctx.from.id !== MASTER_ID) {
     return ctx.reply(MASTER_ONLY_MESSAGE, { parse_mode: 'HTML' });
@@ -2253,7 +2257,7 @@ bot.command('addhari', async (ctx) => {
 // Command: /kuranghari <jumlah_hari>
 // Mengurangi masa aktif lisensi bot
 bot.command('kuranghari', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   if (!ctx.from || ctx.from.id !== MASTER_ID) {
     return ctx.reply(MASTER_ONLY_MESSAGE, { parse_mode: 'HTML' });
@@ -2532,7 +2536,7 @@ bot.command('addsaldo', async (ctx) => {
               let notifTopup =
                 '<blockquote>\n' +
                 '━━━ TOPUP MANUAL ━━━\n' +
-				'<code>\n' + // <-- MULAI BLOK MONOSPACE
+                                '<code>\n' + // <-- MULAI BLOK MONOSPACE
                 `👤 User   : ${userLabel}\n` +
                 `🆔 ID     : ${targetId}\n` +
                 `💵 Bayar  : Rp ${amount.toLocaleString('id-ID')}\n`;
@@ -2549,7 +2553,7 @@ bot.command('addsaldo', async (ctx) => {
               notifTopup +=
                 `💼 Saldo  : Rp ${newSaldo.toLocaleString('id-ID')}\n` +
                 `📅 Tanggal: ${waktu}\n` +
-				'</code>\n' + // <-- AKHIR BLOK MONOSPACE
+                                '</code>\n' + // <-- AKHIR BLOK MONOSPACE
                 '━━━━━━━━━━━━━━━━━━━━\n' +
                 '</blockquote>';
 
@@ -2571,7 +2575,7 @@ bot.command('addsaldo', async (ctx) => {
 // Manual admin command: /minsaldo <user_id> <jumlah>
 // Mengurangi saldo user secara manual oleh admin
 bot.command('minsaldo', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   // Hanya admin yang boleh pakai
   if (!ctx.from || !ADMIN_IDS.includes(ctx.from.id)) {
@@ -2723,7 +2727,7 @@ try {
 // Manual admin command: /deluser <user_id>
 // Menghapus user dari tabel users dan (jika ada) dari daftar reseller
 bot.command('deluser', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   // Hanya admin yang boleh pakai (pakai pola yang sama seperti /addsaldo)
    if (!ctx.from || !ADMIN_IDS.includes(ctx.from.id)) {
@@ -2793,7 +2797,7 @@ bot.command('deluser', async (ctx) => {
 // Command: /listuser
 // Menampilkan total user, total reseller, dan 10 user terakhir
 bot.command('listuser', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   // Hanya admin yang boleh pakai
   if (!ctx.from || !ADMIN_IDS.includes(ctx.from.id)) {
@@ -2916,7 +2920,7 @@ bot.command('setflag', async (ctx) => {
 });
 
 bot.command('lastbroadcast', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   if (!ctx.from) return;
   const userId = ctx.from.id;
@@ -2952,7 +2956,7 @@ bot.command('lastbroadcast', async (ctx) => {
 
 //////////////////
 bot.command('admin', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   logger.info('Admin menu requested');
 
@@ -3077,12 +3081,12 @@ ${commandPanelText}
     [
       { text: '🤝 Jadi Reseller harga lebih murah!!', callback_data: 'jadi_reseller' }
     ],
-	// ========================================================================
+        // ========================================================================
     // SECTION: PAYMENT - TOMBOL TOPUP SALDO
     // ========================================================================
-	[
+        [
    { text: '💳 TopUp Saldo OTOMATIS (QRIS)', callback_data: 'topupqris_btn' }
-	],
+        ],
     //[
      // { text: '💰 TopUp Saldo MANUAL via (QRIS)', callback_data: 'topup_manual' }
     //]
@@ -3114,7 +3118,7 @@ ${commandPanelText}
 
 
 bot.command('hapuslog', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   if (!adminIds.includes(ctx.from.id)) return ctx.reply('Tidak ada izin!');
   try {
@@ -3230,7 +3234,7 @@ ${trialInfoText}
 // Command: /helpadmin
 // Menampilkan daftar lengkap perintah admin
 bot.command('helpadmin', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   const userId = ctx.message.from.id;
 
@@ -3952,7 +3956,7 @@ bot.command('cekqris', async (ctx) => {
 
 
 bot.command('addserver', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   const userId = ctx.message.from.id;
   if (!ADMIN_IDS.includes(userId)) {
@@ -4347,7 +4351,7 @@ bot.command('editlimitcreate', async (ctx) => {
 });
 
 bot.command('edittotalcreate', async (ctx) => {
-	// Wajib di private chat
+        // Wajib di private chat
   if (!ensurePrivateChat(ctx)) return;
   const userId = ctx.message.from.id;
   if (!ADMIN_IDS.includes(userId)) {
@@ -7304,7 +7308,7 @@ bot.action('admin_reseller_menu', async (ctx) => {
     [
       { text: '👥 List Res & Member',      callback_data: 'list_res_mem' }
     ],
-	[
+        [
       { text: '🎯 Target Reseller',        callback_data: 'admin_reseller_target' }
     ],
     [
@@ -11199,7 +11203,7 @@ if (lowerType.includes('deposit')) {
   }
 ///////
     if (state.step.startsWith('username_trial_')) {
-		
+                
 // Hapus pesan konfirmasi user (biar chat tetap bersih)
   try { await ctx.deleteMessage().catch(() => {}); } catch (e) {}
   
@@ -11629,7 +11633,7 @@ if (baseHarga30 > 0) {
           if (saldo < totalHarga) {
             return ctx.reply('❌ *Saldo Anda tidak mencukupi untuk melakukan transaksi ini.*', { parse_mode: 'Markdown' });
           }
-		            // 🔹 Limit create per hari untuk WATCHLIST (non-reseller)
+                            // 🔹 Limit create per hari untuk WATCHLIST (non-reseller)
           // isR sudah dihitung di atas (pakai isUserReseller)
           if (action === 'create' && !isR) {
             try {
@@ -11654,7 +11658,7 @@ if (baseHarga30 > 0) {
               // Kalau error, jangan blok user (anggap saja lolos)
             }
           }
-		  let waitCtrl = null;
+                  let waitCtrl = null;
 waitCtrl = await startWaiting(ctx, '⏳ Sedang membuat akun...');
           if (action === 'create') {
             if (type === 'vmess') {
@@ -12216,12 +12220,12 @@ bot.telegram
                   const notifTopup =
                     '<blockquote>\n' +
                     '━━━━━ TOPUP MANUAL ━━━━━\n\n' +
-					'<code>\n' + // <-- MULAI BLOK MONOSPACE
+                                        '<code>\n' + // <-- MULAI BLOK MONOSPACE
                     'User   : ' + targetName + ' (' + safeTargetId + ')\n' +
                     'Topup  : Rp ' + amount.toLocaleString() + '\n' +
                     'Status : SUCCESS\n' +
                     'Tanggal: ' + waktu + '\n' +
-					'</code>\n' + // <-- AKHIR BLOK MONOSPACE
+                                        '</code>\n' + // <-- AKHIR BLOK MONOSPACE
                     '━━━━━━━━━━━━━━━━━━━━\n' +
                     '</blockquote>';
 
@@ -14148,21 +14152,25 @@ if (EXPIRE_DATE) {
 }
 
 
-// Jalankan bot
-bot.launch()
-  .then(() => {
-    logger.info('Bot telah dimulai (build QRIS AUTO v3)');
-  })
-  .catch((error) => {
-    logger.error('Error saat memulai bot:', error);
-  });
+// Jalankan bot (hanya kalau BOT_TOKEN sudah di-set)
+if (BOT_TOKEN) {
+  bot.launch()
+    .then(() => {
+      logger.info('Bot telah dimulai (build QRIS AUTO v3)');
+    })
+    .catch((error) => {
+      logger.error('Error saat memulai bot:', error);
+    });
 
-// Jalankan scheduler di luar app.listen
-startAutoTopupMutasi(bot, db, logger, axios);
-restartAutoBackupScheduler();
-startDailyReportScheduler();
-startExpiryReminderScheduler();
-startResellerTargetScheduler();
+  // Jalankan scheduler di luar app.listen
+  startAutoTopupMutasi(bot, db, logger, axios);
+  restartAutoBackupScheduler();
+  startDailyReportScheduler();
+  startExpiryReminderScheduler();
+  startResellerTargetScheduler();
+} else {
+  logger.warn('BOT_TOKEN belum di-set di .vars.json. Bot tidak akan berjalan. Set BOT_TOKEN terlebih dahulu.');
+}
 // startQrisAutoTopupChecker(); // JANGAN dipanggil lagi di sini,
 //                              // soalnya di atas sudah ada "startQrisAutoTopupChecker();"
 
