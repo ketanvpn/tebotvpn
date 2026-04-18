@@ -1,0 +1,162 @@
+#!/bin/bash
+export TERM=xterm-256color
+dpkg-statoverride --remove /var/spool/exim4 2>/dev/null
+dpkg --configure -a
+apt -f install -y
+mv /var/lib/dpkg/statoverride /var/lib/dpkg/statoverride.old 2>/dev/null
+touch /var/lib/dpkg/statoverride
+
+neutral="\e[0m"
+red="\e[38;5;196m"
+yellow="\e[38;5;226m"
+green="\e[38;5;82m"
+blue="\e[38;5;45m"
+purple="\e[38;5;135m"
+cyan="\e[38;5;87m"
+bold_white="\e[1;37m"
+
+loading_spinner() {
+    local message="$1"
+    local spin='|/-\'
+    local i=0
+
+    echo -ne "\r${cyan}⏳ ${message}... ${neutral}"
+
+    while [ "$(cat /tmp/spinner_stop)" != "1" ]; do
+        printf "\r${cyan}⏳ ${message}... ${spin:i++%${#spin}:1}${neutral}"
+        sleep 0.1
+    done
+
+    # Clear baris spinner setelah selesai
+    printf "\r\033[K"
+}
+
+print_rainbow_center() {
+    local text="$1"
+    local width=70
+    local len=${#text}
+    local pad=$(( (width - len) / 2 ))
+    printf "%${pad}s" ""
+    for ((i=0; i<$len; i++)); do
+        local r=$((128 + (i * 50 / len)))
+        local g=$((0 + (i * 255 / len)))
+        local b=$((255 - (i * 80 / len)))
+        printf "\e[38;2;%d;%d;%dm%s" "$r" "$g" "$b" "${text:$i:1}"
+    done
+    echo -e "${neutral}"
+}
+
+input_field() {
+    local prompt="$1"
+    local varname="$2"
+    local value=""
+
+    echo ""
+    echo -e "${purple}[ ${neutral}${bold_white}${prompt}${neutral}${purple} ]${neutral}"
+    echo -ne "${cyan}> ${neutral}"
+    read value
+
+    while [ -z "$value" ]; do
+        echo -e "${red}⚠ Input tidak boleh kosong!${neutral}"
+        echo -ne "${cyan}> ${neutral}"
+        read value
+    done
+
+    # Spinner start
+    echo 0 >/tmp/spinner_stop
+    loading_spinner "Memproses" &
+    SPIN_PID=$!
+
+    sleep 1
+
+    # Stop spinner
+    echo 1 >/tmp/spinner_stop
+    wait $SPIN_PID 2>/dev/null
+
+    # Setelah spinner hilang, lanjut input berikutnya
+    eval "$varname='$value'"
+}
+
+
+show_header() {
+    clear
+    echo -e "${purple}====================================================================${neutral}"
+    print_rainbow_center "⚡ INSTALASI BOT TELEGRAM • SELLVPN ⚡"
+    echo -e "${purple}====================================================================${neutral}"
+    echo -e "${cyan}${bold}Fitur penting yang tersedia:${neutral}"
+    echo -e "${cyan}•${neutral} create user"
+    echo -e "${cyan}•${neutral} renew user"
+    echo -e "${cyan}•${neutral} lock user"
+    echo -e "${cyan}•${neutral} unlock user"
+    echo -e "${cyan}•${neutral} delete user"
+    echo -e "${cyan}•${neutral} addsaldo user"
+    echo -e "${cyan}•${neutral} ceksaldo user"
+    echo -e "${cyan}•${neutral} tambah server khusus reseller"
+    echo ""
+    echo -e "${cyan}Menyiapkan panel input...${neutral}"
+    echo ""
+}
+
+cek_status() {
+    pm2 status | grep -q sellvpn && echo "aktif" || echo "nonaktif"
+}
+
+setup_bot() {
+    timedatectl set-timezone Asia/Jakarta >/dev/null 2>&1
+    if ! dpkg -s nodejs >/dev/null 2>&1; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+        apt install -y nodejs
+    fi
+    rm -rf /root/BotVPN
+    git clone https://github.com/harismy/BotVPN.git /root/BotVPN
+    npm install -g npm@latest pm2
+    npm install --prefix /root/BotVPN sqlite3 express crypto telegraf axios dotenv
+    chmod +x /root/BotVPN/*
+}
+
+server_app() {
+    show_header
+    input_field "Masukkan Token Bot" token
+    input_field "Masukkan Admin ID" adminid
+    input_field "Masukkan Nama Store" namastore
+    input_field "Masukkan Data QRIS" dataqris
+    input_field "Masukkan ID Group Notif" groupid
+
+    merchantid="NONE"
+    apikey="NONE"
+
+cat >/root/BotVPN/.vars.json <<EOF
+{
+  "BOT_TOKEN": "$token",
+  "USER_ID": "$adminid",
+  "NAMA_STORE": "$namastore",
+  "GROUP_ID": "$groupid",
+  "PORT": "6969",
+  "DATA_QRIS": "$dataqris",
+  "MERCHANT_ID": "$merchantid",
+  "API_KEY": "$apikey"
+}
+EOF
+
+    cd /root/BotVPN
+    pm2 start ecosystem.config.js
+    pm2 startup
+    pm2 save
+
+    echo ""
+    echo -e "${purple}====================================================================${neutral}"
+    print_rainbow_center "🎉 BOT BERHASIL DIINSTAL 🎉"
+    echo -e "${purple}====================================================================${neutral}"
+    echo ""
+    echo -e " Status Server : ${green}$(cek_status)${neutral}"
+    echo -e " Jalankan di Telegram: ${bold_white}/start${neutral}"
+    echo ""
+}
+
+if [[ $1 == "sellvpn" ]]; then
+    setup_bot
+    server_app
+else
+    echo -e "${red}Gunakan perintah:${neutral} ${yellow}bash start sellvpn${neutral}"
+    exit 1
+fi

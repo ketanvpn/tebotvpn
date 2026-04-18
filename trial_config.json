@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "maxPerDay": 2,
+  "durationHours": 1,
+  "minBalanceForTrial": 0
+}
