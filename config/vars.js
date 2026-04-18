@@ -85,6 +85,14 @@ const RESELLER_TARGET_MIN_DAYS_PER_MONTH = Number(vars.RESELLER_TARGET_MIN_DAYS_
 const RESELLER_TARGET_CHECK_HOUR         = Number(vars.RESELLER_TARGET_CHECK_HOUR         || 1);
 const RESELLER_TARGET_CHECK_MINUTE       = Number(vars.RESELLER_TARGET_CHECK_MINUTE       || 5);
 
+// ── Computed: ADMIN_IDS sebagai array angka ───────────────────────────────────
+const ADMIN_IDS = Array.isArray(ADMIN_IDS_RAW)
+  ? ADMIN_IDS_RAW.map((id) => Number(id))
+  : String(ADMIN_IDS_RAW)
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => !Number.isNaN(n));
+
 module.exports = {
   vars,
   VARS_PATH,
@@ -94,6 +102,7 @@ module.exports = {
   PORT,
   MASTER_ID,
   ADMIN_IDS_RAW,
+  ADMIN_IDS,
   NAMA_STORE,
   RESELLER_DISCOUNT,
   GROUP_ID,
