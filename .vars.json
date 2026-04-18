@@ -13,6 +13,7 @@
   "ORDERKUOTA_AUTH_TOKEN": "",
   "ORDERKUOTA_CREATEPAYMENT_URL": "https://api.rajaserverpremium.web.id/orderkuota/createpayment",
   "ORDERKUOTA_CREATEPAYMENT_APIKEY": "",
+  "ADMIN_WHATSAPP": "",
   "QRIS_AUTO_TOPUP_MIN": 15000,
   "QRIS_AUTO_TOPUP_MAX": 500000,
   "QRIS_CHECK_INTERVAL_MS": 5000,

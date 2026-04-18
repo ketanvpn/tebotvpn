@@ -398,6 +398,25 @@ const ORDERKUOTA_CREATEPAYMENT_URL =
 const ORDERKUOTA_CREATEPAYMENT_APIKEY =
   vars.ORDERKUOTA_CREATEPAYMENT_APIKEY || '';
 
+// Nomor WhatsApp admin (dipakai di pesan topup manual)
+const ADMIN_WHATSAPP = vars.ADMIN_WHATSAPP || '';
+
+// === Variabel untuk pollMutasi (legacy orkut polling) ===
+const qs = require('qs');
+function buildPayload() {
+  return qs.stringify({
+    username: ORDERKUOTA_AUTH_USERNAME,
+    token: ORDERKUOTA_AUTH_TOKEN,
+    jenis: 'masuk',
+  });
+}
+const API_URL = 'https://orkutapi.andyyuda41.workers.dev/api/qris-history';
+const headers = {
+  'Content-Type': 'application/x-www-form-urlencoded',
+  'Accept-Encoding': 'gzip',
+  'User-Agent': 'okhttp/4.12.0',
+};
+
 let qrisGen = null;
 let qrisPaymentChecker = null;
 
@@ -1228,72 +1247,6 @@ function saveExpiryReminderConfig() {
       'Gagal menyimpan pengingat expired ke .vars.json:',
       e.message
     );
-  }
-}
-
-// Kirim backup otomatis ke BACKUP_CHAT_ID
-async function sendAutoBackup(reason = 'backup otomatis') {
-  try {
-    if (!BACKUP_CHAT_ID) {
-      logger.warn('BACKUP_CHAT_ID kosong, lewati backup otomatis.');
-      return;
-    }
-
-    const candidateFiles = [
-      './sellvpn.db',
-      './ressel.db',
-      './trial.db',
-    ];
-
-    const files = candidateFiles.filter((filePath) => fs.existsSync(filePath));
-
-    if (files.length === 0) {
-      await bot.telegram.sendMessage(
-        BACKUP_CHAT_ID,
-        '⚠️ Backup otomatis gagal: tidak ada file yang ditemukan.'
-      );
-      return;
-    }
-
-    const waktu = new Date().toLocaleString('id-ID', {
-      timeZone: TIME_ZONE,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    await bot.telegram.sendMessage(
-      BACKUP_CHAT_ID,
-      `🗄️ Mulai backup otomatis.\nAlasan: <b>${reason}</b>\nWaktu: <b>${waktu}</b>`,
-      { parse_mode: 'HTML' }
-    );
-
-    for (const filePath of files) {
-      const filename = filePath.replace('./', '');
-
-      try {
-        await bot.telegram.sendDocument(
-          BACKUP_CHAT_ID,
-          { source: filePath, filename },
-          {
-            caption: `📦 Backup: <b>${filename}</b>\nWaktu: <b>${waktu}</b>`,
-            parse_mode: 'HTML',
-          }
-        );
-      } catch (err) {
-        logger.error(`❌ Gagal kirim backup file ${filename}: ${err.message}`);
-      }
-    }
-
-    await bot.telegram.sendMessage(
-      BACKUP_CHAT_ID,
-      `✅ Backup otomatis selesai.\nTotal file: <b>${files.length}</b>`,
-      { parse_mode: 'HTML' }
-    );
-  } catch (err) {
-    logger.error('❌ Error di sendAutoBackup:', err);
   }
 }
 
@@ -5766,8 +5719,7 @@ ID Telegram : ${userId}
 Nominal     : Rp...
 Metode      : QRIS</code>
 
-Kalau belum pernah chat admin, klik username ${adminName} atau hubungi via WhatsApp:
-https://wa.me/6282397803813
+Kalau belum pernah chat admin, klik username ${adminName}${ADMIN_WHATSAPP ? ` atau hubungi via WhatsApp:\nhttps://wa.me/${ADMIN_WHATSAPP.replace(/[^0-9]/g, '')}` : ''}
 
 <i>Admin akan mengecek pembayaran kamu dan mengisi saldo secepatnya.</i>
 `.trim();
@@ -8366,8 +8318,6 @@ bot.action('service_unlock', async (ctx) => {
 });
 
 
-const { exec } = require('child_process');
-
 bot.action('cek_service', async (ctx) => {
   try {
     // Tutup loading di tombol inline
@@ -8396,63 +8346,76 @@ bot.action('cek_service', async (ctx) => {
     // ✅ Jika reseller / admin, lanjut jalankan cek service
     const loadingMsg = await ctx.reply('⏳ Sedang mengecek status server, mohon tunggu sebentar...');
 
-    exec('chmod +x cek-port.sh && bash cek-port.sh', (error, stdout, stderr) => {
-      if (error) {
-        logger.error(`Gagal menjalankan skrip cek-port.sh: ${error.message}`);
-        return ctx.telegram.editMessageText(
-          loadingMsg.chat.id,
-          loadingMsg.message_id,
-          undefined,
-          '❌ Terjadi kesalahan saat menjalankan skrip pengecekan server.',
-          { parse_mode: 'Markdown' }
-        );
-      }
+    // Cek port pakai Node.js native net module
+    const net = require('net');
+    const PORTS_TO_CHECK = [22, 80, 443, 8080, 1194];
+    const TIMEOUT_MS = 3000;
 
-      if (stderr) {
-        logger.error(`Error dari skrip cek-port.sh: ${stderr}`);
-      }
+    function checkPort(host, port) {
+      return new Promise((resolve) => {
+        const socket = new net.Socket();
+        socket.setTimeout(TIMEOUT_MS);
+        socket.once('connect', () => { socket.destroy(); resolve('OPEN'); });
+        socket.once('timeout', () => { socket.destroy(); resolve('TIMEOUT'); });
+        socket.once('error', () => { socket.destroy(); resolve('CLOSED'); });
+        socket.connect(port, host);
+      });
+    }
 
-      // Bersihkan kode warna ANSI supaya rapi
-      let cleanOutput = stdout.replace(/\x1b\[[0-9;]*m/g, '').trim();
-      if (!cleanOutput) {
-        cleanOutput = 'Tidak ada output dari skrip cek-port.sh.';
-      }
-
-      // Escape karakter berbahaya untuk HTML
-      cleanOutput = cleanOutput
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
-      // Batasi panjang output supaya tidak terlalu panjang
-      if (cleanOutput.length > 1500) {
-        cleanOutput = cleanOutput.slice(0, 1500) + '\n... (dipotong, output terlalu panjang)';
-      }
-
-      const timestamp = new Date().toLocaleString('id-ID', {
-        timeZone: TIME_ZONE,
+    try {
+      const servers = await new Promise((resolve, reject) => {
+        db.all('SELECT id, nama_server, domain FROM Server', [], (err, rows) => {
+          err ? reject(err) : resolve(rows || []);
+        });
       });
 
+      if (!servers.length) {
+        await ctx.telegram.editMessageText(
+          loadingMsg.chat.id, loadingMsg.message_id, undefined,
+          '⚠️ Belum ada server yang terdaftar.', { parse_mode: 'HTML' }
+        );
+        return;
+      }
+
+      let output = '';
+      for (const srv of servers) {
+        const host = (srv.domain || '').replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+        if (!host) continue;
+        output += `\n🖥 <b>${srv.nama_server || srv.domain}</b>\n`;
+        for (const port of PORTS_TO_CHECK) {
+          const status = await checkPort(host, port);
+          const icon = status === 'OPEN' ? '🟢' : status === 'TIMEOUT' ? '🟡' : '🔴';
+          output += `  ${icon} Port ${port}: ${status}\n`;
+        }
+      }
+
+      const timestamp = new Date().toLocaleString('id-ID', { timeZone: TIME_ZONE });
       const legend =
-        '\n\n<b>Keterangan:</b>\n' +
-        '• <b>OPEN</b>      : Port terbuka dan layanan merespons dengan baik.\n' +
-        '• <b>CLOSED</b>    : Port tertutup atau layanan tidak aktif.\n' +
-        '• <b>TIMEOUT</b>   : Tidak ada balasan dari server, kemungkinan gangguan koneksi.';
+        '\n<b>Keterangan:</b>\n' +
+        '• 🟢 <b>OPEN</b>    : Port terbuka, layanan aktif.\n' +
+        '• 🔴 <b>CLOSED</b>  : Port tertutup atau layanan nonaktif.\n' +
+        '• 🟡 <b>TIMEOUT</b> : Tidak ada balasan dari server.';
 
       const resultText =
-        `<b>📶 STATUS SERVER </b>\n` +
-        `Waktu cek: <b>${timestamp}</b>\n\n` +
-        `<pre>${cleanOutput}</pre>` +
-        legend;
+        `<b>📶 STATUS SERVER</b>\n` +
+        `Waktu cek: <b>${timestamp}</b>\n` +
+        output + legend;
 
-      ctx.telegram.editMessageText(
-        loadingMsg.chat.id,
-        loadingMsg.message_id,
-        undefined,
-        resultText,
-        { parse_mode: 'HTML' }
+      const safeText = resultText.length > 4000
+        ? resultText.slice(0, 3900) + '\n... (dipotong)'
+        : resultText;
+
+      await ctx.telegram.editMessageText(
+        loadingMsg.chat.id, loadingMsg.message_id, undefined,
+        safeText, { parse_mode: 'HTML' }
       );
-    });
+    } catch (innerErr) {
+      logger.error('❌ Gagal cek port server:', innerErr.message || innerErr);
+      await ctx.telegram.editMessageText(
+        loadingMsg.chat.id, loadingMsg.message_id, undefined,
+        '❌ Terjadi kesalahan saat mengecek server.', { parse_mode: 'HTML' }
+      ).catch(() => {});
+    }
   } catch (err) {
     logger.error('❌ Error cek_service:', err);
     try {
@@ -11357,8 +11320,7 @@ await ctx.reply(msg + extraInfo, { parse_mode: 'Markdown' });
       const idUser = ctx.from.id.toString().trim();
       const resselList = data.split('\n').map(line => line.trim()).filter(Boolean);
 
-      console.log('🧪 ID Pengguna:', idUser);
-      console.log('📂 Daftar Ressel:', resselList);
+
 
       const isRessel = resselList.includes(idUser);
 
@@ -11411,8 +11373,7 @@ await ctx.reply(msg + extraInfo, { parse_mode: 'Markdown' });
       const idUser = ctx.from.id.toString().trim();
       const resselList = data.split('\n').map(line => line.trim()).filter(Boolean);
 
-      console.log('🧪 ID Pengguna:', idUser);
-      console.log('📂 Daftar Ressel:', resselList);
+
 
       const isRessel = resselList.includes(idUser);
 
@@ -11465,8 +11426,7 @@ await ctx.reply(msg + extraInfo, { parse_mode: 'Markdown' });
       const idUser = ctx.from.id.toString().trim();
       const resselList = data.split('\n').map(line => line.trim()).filter(Boolean);
 
-      console.log('🧪 ID Pengguna:', idUser);
-      console.log('📂 Daftar Ressel:', resselList);
+
 
       const isRessel = resselList.includes(idUser);
 
@@ -13639,12 +13599,6 @@ db.all('SELECT * FROM pending_deposits WHERE status = "pending"', [], (err, rows
 // PM2 cluster guard (biar interval cuma jalan 1x kalau pakai cluster)
 const IS_PM2_PRIMARY = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0';
 
-function _parseRupiahToInt(v) {
-  if (typeof v === 'number') return Math.round(v);
-  if (!v) return 0;
-  return parseInt(String(v).replace(/[^\d]/g, ''), 10) || 0;
-}
-
 function _getOrkutAccountId() {
   // token format: "2304754:xxxx"
   if (ORDERKUOTA_AUTH_TOKEN && String(ORDERKUOTA_AUTH_TOKEN).includes(':')) {
@@ -13994,7 +13948,7 @@ async function checkQRISStatus() {
       // kalau resp.result ada list mutasi
       if (Array.isArray(resp.result)) {
         for (const item of resp.result) {
-          const kredit = _parseRupiahToInt(item.kredit || item.jumlah || item.amount || item.nominal);
+          const kredit = parseRupiahInt(item.kredit || item.jumlah || item.amount || item.nominal);
           if (kredit === expected) {
             matchedTransaction = {
               amount: kredit,
