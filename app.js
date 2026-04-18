@@ -5,41 +5,8 @@ const { Telegraf } = require('telegraf');
 const app = express();
 const axios = require('axios');
 const { isUserReseller, addReseller, removeReseller, listResellersSync } = require('./modules/reseller');
-const winston = require('winston');
 
-const logger = winston.createLogger({
-  // Bisa diatur via ENV, default 'info'
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.printf(({ timestamp, level, message }) => {
-      return `${timestamp} [${level.toUpperCase()}]: ${message}`;
-    })
-  ),
-  transports: [
-    // Log error saja, file kecil tapi penting
-    new winston.transports.File({
-      filename: 'bot-error.log',
-      level: 'error',
-      maxsize: 5 * 1024 * 1024, // 5 MB per file
-      maxFiles: 3,              // simpan 3 file (15MB total)
-    }),
-
-    // Log gabungan, bisa agak lebih besar
-    new winston.transports.File({
-      filename: 'bot-combined.log',
-      maxsize: 10 * 1024 * 1024, // 10 MB per file
-      maxFiles: 5,               // simpan 5 file (50MB total)
-    }),
-  ],
-});
-
-// Di luar production, log ke console untuk debugging
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.simple(),
-  }));
-}
+const logger = require('./config/logger');
 
 
 // Helper sederhana untuk jeda (dipakai di broadcast)
@@ -51,7 +18,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/', (req, res) => {
-  res.send(`<!DOCTYPE html><html><head><title>BotVPN 1FORCR</title></head><body style="font-family:sans-serif;max-width:600px;margin:40px auto;padding:20px"><h1>BotVPN 1FORCR</h1><p>Telegram bot untuk manajemen layanan VPN.</p><p><strong>Status:</strong> ${vars.BOT_TOKEN ? '🟢 Bot Configured' : '🔴 BOT_TOKEN belum di-set di .vars.json'}</p><p>Edit file <code>.vars.json</code> untuk mengkonfigurasi bot Anda.</p></body></html>`);
+  res.send(`<!DOCTYPE html><html><head><title>BotVPN 1FORCR</title></head><body style="font-family:sans-serif;max-width:600px;margin:40px auto;padding:20px"><h1>BotVPN 1FORCR</h1><p>Telegram bot untuk manajemen layanan VPN.</p><p><strong>Status:</strong> ${BOT_TOKEN ? '🟢 Bot Configured' : '🔴 BOT_TOKEN belum di-set di .vars.json'}</p><p>Edit file <code>.vars.json</code> untuk mengkonfigurasi bot Anda.</p></body></html>`);
 });
 
 const {
@@ -372,34 +339,74 @@ async function saveTrialAccess(userId) {
 
   await fsPromises.writeFile(trialFile, JSON.stringify(trialData, null, 2));
 }
-// ============================================================================
-// SECTION: PAYMENT CONFIG & QRIS ORDERKUOTA
-// - Baca .vars.json
-// - Inisialisasi autoft-qris (QRISGenerator, PaymentChecker)
-// - Batas nominal & interval cek QRIS
-// ============================================================================
-
+// ── Config: baca .vars.json & semua variabel konfigurasi ─────────────────────
 const fs = require('fs');
-let vars = {};
-try {
-  vars = JSON.parse(fs.readFileSync(VARS_PATH, 'utf8'));
-} catch (e) {
-  logger.error('Gagal membaca .vars.json. Pastikan file ada & format JSON benar:', e.message || e);
-  vars = {};
-}
-const ORDERKUOTA_BASE_QR = vars.ORDERKUOTA_BASE_QR || '';
-const ORDERKUOTA_AUTH_USERNAME = vars.ORDERKUOTA_AUTH_USERNAME || '';
-const ORDERKUOTA_AUTH_TOKEN = vars.ORDERKUOTA_AUTH_TOKEN || '';
-//const { QRISGenerator, PaymentChecker } = require('autoft-qris');
-const ORDERKUOTA_CREATEPAYMENT_URL =
-  vars.ORDERKUOTA_CREATEPAYMENT_URL ||
-  'https://api.rajaserverpremium.web.id/orderkuota/createpayment';
+const cfg = require('./config/vars');
 
-const ORDERKUOTA_CREATEPAYMENT_APIKEY =
-  vars.ORDERKUOTA_CREATEPAYMENT_APIKEY || '';
+const { vars } = cfg;
+const {
+  BOT_TOKEN,
+  MASTER_ID,
+  ADMIN_IDS_RAW,
+  NAMA_STORE,
+  RESELLER_DISCOUNT,
+  GROUP_ID,
+  NOTIF_TOPUP_GROUP,
+  DATA_QRIS,
+  MERCHANT_ID,
+  API_KEY,
+  ORDERKUOTA_BASE_QR,
+  ORDERKUOTA_AUTH_USERNAME,
+  ORDERKUOTA_AUTH_TOKEN,
+  ORDERKUOTA_CREATEPAYMENT_URL,
+  ORDERKUOTA_CREATEPAYMENT_APIKEY,
+  ADMIN_WHATSAPP,
+  QRIS_AUTO_TOPUP_MIN,
+  QRIS_AUTO_TOPUP_MAX,
+  QRIS_CHECK_INTERVAL_MS,
+  QRIS_PAYMENT_TIMEOUT_MIN,
+  BACKUP_CHAT_ID,
+} = cfg;
 
-// Nomor WhatsApp admin (dipakai di pesan topup manual)
-const ADMIN_WHATSAPP = vars.ADMIN_WHATSAPP || '';
+const port = cfg.PORT;
+
+// Variabel yang bisa diubah admin saat runtime
+let TOPUP_BONUS_ENABLED       = cfg.TOPUP_BONUS_ENABLED;
+let TOPUP_BONUS_MIN_AMOUNT    = cfg.TOPUP_BONUS_MIN_AMOUNT;
+let TOPUP_BONUS_PERCENT       = cfg.TOPUP_BONUS_PERCENT;
+let TOPUP_BONUS_TIER2_MIN     = cfg.TOPUP_BONUS_TIER2_MIN;
+let TOPUP_BONUS_TIER2_PERCENT = cfg.TOPUP_BONUS_TIER2_PERCENT;
+let TOPUP_BONUS_TIER3_MIN     = cfg.TOPUP_BONUS_TIER3_MIN;
+let TOPUP_BONUS_TIER3_PERCENT = cfg.TOPUP_BONUS_TIER3_PERCENT;
+
+let AUTO_BACKUP_ENABLED        = cfg.AUTO_BACKUP_ENABLED;
+let AUTO_BACKUP_INTERVAL_HOURS = cfg.AUTO_BACKUP_INTERVAL_HOURS;
+
+let DAILY_REPORT_ENABLED = cfg.DAILY_REPORT_ENABLED;
+let DAILY_REPORT_HOUR    = cfg.DAILY_REPORT_HOUR;
+let DAILY_REPORT_MINUTE  = cfg.DAILY_REPORT_MINUTE;
+
+let EXPIRY_REMINDER_ENABLED     = cfg.EXPIRY_REMINDER_ENABLED;
+let EXPIRY_REMINDER_HOUR        = cfg.EXPIRY_REMINDER_HOUR;
+let EXPIRY_REMINDER_MINUTE      = cfg.EXPIRY_REMINDER_MINUTE;
+let EXPIRY_REMINDER_DAYS_BEFORE = cfg.EXPIRY_REMINDER_DAYS_BEFORE;
+
+let RESELLER_TARGET_ENABLED            = cfg.RESELLER_TARGET_ENABLED;
+let RESELLER_TARGET_MIN_30D_ACCOUNTS   = cfg.RESELLER_TARGET_MIN_30D_ACCOUNTS;
+let RESELLER_TARGET_MIN_DAYS_PER_MONTH = cfg.RESELLER_TARGET_MIN_DAYS_PER_MONTH;
+let RESELLER_TARGET_CHECK_HOUR         = cfg.RESELLER_TARGET_CHECK_HOUR;
+let RESELLER_TARGET_CHECK_MINUTE       = cfg.RESELLER_TARGET_CHECK_MINUTE;
+
+let EXPIRE_DATE = cfg.EXPIRE_DATE;
+let TIME_ZONE   = cfg.TIME_ZONE;
+
+// Log init summary
+logger.info(`Topup bonus init: enabled=${TOPUP_BONUS_ENABLED}, tier1>=${TOPUP_BONUS_MIN_AMOUNT}@${TOPUP_BONUS_PERCENT}%, tier2>=${TOPUP_BONUS_TIER2_MIN}@${TOPUP_BONUS_TIER2_PERCENT}%, tier3>=${TOPUP_BONUS_TIER3_MIN}@${TOPUP_BONUS_TIER3_PERCENT}%`);
+logger.info(`Auto-backup init: enabled=${AUTO_BACKUP_ENABLED}, interval=${AUTO_BACKUP_INTERVAL_HOURS} jam, chat=${BACKUP_CHAT_ID}`);
+logger.info(`Daily report init: enabled=${DAILY_REPORT_ENABLED}, time=${DAILY_REPORT_HOUR}:${String(DAILY_REPORT_MINUTE).padStart(2, '0')}`);
+logger.info(`Expiry reminder init: enabled=${EXPIRY_REMINDER_ENABLED}, daysBefore=${EXPIRY_REMINDER_DAYS_BEFORE}, time=${EXPIRY_REMINDER_HOUR}:${String(EXPIRY_REMINDER_MINUTE).padStart(2, '0')}`);
+logger.info(`Reseller target init: enabled=${RESELLER_TARGET_ENABLED}, min30d=${RESELLER_TARGET_MIN_30D_ACCOUNTS}, minDays=${RESELLER_TARGET_MIN_DAYS_PER_MONTH}, time=${RESELLER_TARGET_CHECK_HOUR}:${String(RESELLER_TARGET_CHECK_MINUTE).padStart(2, '0')}`);
+logger.info(`Time zone init: ${TIME_ZONE}`);
 
 // === Variabel untuk pollMutasi (legacy orkut polling) ===
 const qs = require('qs');
@@ -454,28 +461,6 @@ function getOrkutInstances() {
 }
 
 
-const QRIS_AUTO_TOPUP_MIN = vars.QRIS_AUTO_TOPUP_MIN || 15000;
-const QRIS_AUTO_TOPUP_MAX = vars.QRIS_AUTO_TOPUP_MAX || 500000;
-// Interval cek QRIS & timeout invoice (bisa di-set dari .vars.json)
-const QRIS_CHECK_INTERVAL_MS = Number(vars.QRIS_CHECK_INTERVAL_MS || 5000);
-const QRIS_PAYMENT_TIMEOUT_MIN = Number(vars.QRIS_PAYMENT_TIMEOUT_MIN || 15);
-// ====================== END SECTION: PAYMENT CONFIG & QRIS ===================
-
-// === PENGATURAN BONUS TOPUP (TIER) ===
-let TOPUP_BONUS_ENABLED =
-  typeof vars.TOPUP_BONUS_ENABLED !== 'undefined'
-    ? !!vars.TOPUP_BONUS_ENABLED
-    : true;
-
-let TOPUP_BONUS_MIN_AMOUNT = Number(vars.TOPUP_BONUS_MIN_AMOUNT || 50000);
-let TOPUP_BONUS_PERCENT = Number(vars.TOPUP_BONUS_PERCENT || 5);
-
-let TOPUP_BONUS_TIER2_MIN = Number(vars.TOPUP_BONUS_TIER2_MIN || 100000);
-let TOPUP_BONUS_TIER2_PERCENT = Number(vars.TOPUP_BONUS_TIER2_PERCENT || 7);
-
-let TOPUP_BONUS_TIER3_MIN = Number(vars.TOPUP_BONUS_TIER3_MIN || 200000);
-let TOPUP_BONUS_TIER3_PERCENT = Number(vars.TOPUP_BONUS_TIER3_PERCENT || 10);
-
 // Hitung bonus topup berdasarkan tier (pembulatan ke bawah)
 function calculateTopupBonus(amount) {
   if (!TOPUP_BONUS_ENABLED) {
@@ -509,135 +494,12 @@ function calculateTopupBonus(amount) {
   return { bonus, percent };
 }
 
-logger.info(
-  `Topup bonus init: enabled=${TOPUP_BONUS_ENABLED}, ` +
-    `tier1>=${TOPUP_BONUS_MIN_AMOUNT}@${TOPUP_BONUS_PERCENT}%, ` +
-    `tier2>=${TOPUP_BONUS_TIER2_MIN}@${TOPUP_BONUS_TIER2_PERCENT}%, ` +
-    `tier3>=${TOPUP_BONUS_TIER3_MIN}@${TOPUP_BONUS_TIER3_PERCENT}%`
-);
-
-
-const BOT_TOKEN = vars.BOT_TOKEN;
-const port = vars.PORT || 6969;
-
-// Owner / master
-const MASTER_ID = Number(vars.MASTER_ID || vars.USER_ID); // owner asli
-
-// === LIST ADMIN ===
-// Bisa diisi lewat ADMIN_IDS di .vars.json:
-// "ADMIN_IDS": "690744680,111111111"
-// atau
-// "ADMIN_IDS": [690744680,111111111]
-const ADMIN_IDS_RAW = vars.ADMIN_IDS || vars.USER_ID;
-
-// Konfigurasi lain
-const NAMA_STORE = vars.NAMA_STORE || '@kr2k3n';
-const DATA_QRIS = vars.DATA_QRIS;
-const MERCHANT_ID = vars.MERCHANT_ID;
-const API_KEY = vars.API_KEY;
-// Diskon harga untuk reseller (0.7 = 70% dari harga normal)
-const RESELLER_DISCOUNT = vars.RESELLER_DISCOUNT || 0.5;
-const GROUP_ID = vars.GROUP_ID;
-// Kontrol notif topup/pengurangan saldo ke grup
-// Di .vars.json bisa set "NOTIF_TOPUP_GROUP": true atau false
-const NOTIF_TOPUP_GROUP =
-  vars.NOTIF_TOPUP_GROUP === undefined
-    ? true
-    : String(vars.NOTIF_TOPUP_GROUP).toLowerCase() === 'true';
-
-// === PENGATURAN AUTO BACKUP DATABASE ===
-let AUTO_BACKUP_ENABLED =
-  typeof vars.AUTO_BACKUP_ENABLED !== 'undefined'
-    ? !!vars.AUTO_BACKUP_ENABLED
-    : true;
-
-let AUTO_BACKUP_INTERVAL_HOURS = Number(vars.AUTO_BACKUP_INTERVAL_HOURS || 12);
-
-// Chat tujuan backup otomatis (default: MASTER_ID)
-const BACKUP_CHAT_ID = Number(vars.BACKUP_CHAT_ID || MASTER_ID || 0);
-
-// Timer / handle untuk setInterval auto-backup
-let autoBackupTimer = null;
-
-logger.info(
-  `Auto-backup init: enabled=${AUTO_BACKUP_ENABLED}, interval=${AUTO_BACKUP_INTERVAL_HOURS} jam, chat=${BACKUP_CHAT_ID}`
-);
-
-// === PENGATURAN LAPORAN HARIAN ===
-// ON/OFF (default: aktif kalau tidak diset)
-let DAILY_REPORT_ENABLED =
-  typeof vars.DAILY_REPORT_ENABLED !== 'undefined'
-    ? !!vars.DAILY_REPORT_ENABLED
-    : true;
-
-// Jam & menit laporan (pakai waktu server, biasanya sudah sama WITA/WIT)
-let DAILY_REPORT_HOUR = Number(vars.DAILY_REPORT_HOUR || 23); // jam 23
-let DAILY_REPORT_MINUTE = Number(vars.DAILY_REPORT_MINUTE || 0); // menit 00
-
-// Supaya laporan hanya sekali per hari
-let lastDailyReportDateKey = null;
-
-logger.info(
-  `Daily report init: enabled=${DAILY_REPORT_ENABLED}, time=${DAILY_REPORT_HOUR}:${String(
-    DAILY_REPORT_MINUTE
-  ).padStart(2, '0')}`
-);
-
-// === PENGATURAN PENGINGAT EXPIRED AKUN ===
-let EXPIRY_REMINDER_ENABLED =
-  typeof vars.EXPIRY_REMINDER_ENABLED !== 'undefined'
-    ? !!vars.EXPIRY_REMINDER_ENABLED
-    : true;
-
-// default jam 20:00 H-1
-let EXPIRY_REMINDER_HOUR = Number(vars.EXPIRY_REMINDER_HOUR || 20);
-let EXPIRY_REMINDER_MINUTE = Number(vars.EXPIRY_REMINDER_MINUTE || 0);
-let EXPIRY_REMINDER_DAYS_BEFORE = Number(
-  vars.EXPIRY_REMINDER_DAYS_BEFORE || 1
-);
-
-// Supaya reminder hanya sekali per hari
+// State runtime (timer & flag harian — bukan config)
+let autoBackupTimer          = null;
+let lastDailyReportDateKey   = null;
 let lastExpiryReminderDateKey = null;
-
-logger.info(
-  `Expiry reminder init: enabled=${EXPIRY_REMINDER_ENABLED}, daysBefore=${EXPIRY_REMINDER_DAYS_BEFORE}, time=${EXPIRY_REMINDER_HOUR}:${String(
-    EXPIRY_REMINDER_MINUTE
-  ).padStart(2, '0')}`
-);
-
-// === PENGATURAN TARGET RESELLER ===
-let RESELLER_TARGET_ENABLED =
-  typeof vars.RESELLER_TARGET_ENABLED !== 'undefined'
-    ? !!vars.RESELLER_TARGET_ENABLED
-    : true;
-
-let RESELLER_TARGET_MIN_30D_ACCOUNTS = Number(
-  vars.RESELLER_TARGET_MIN_30D_ACCOUNTS || 3
-);
-
-let RESELLER_TARGET_MIN_DAYS_PER_MONTH = Number(
-  vars.RESELLER_TARGET_MIN_DAYS_PER_MONTH || 90
-);
-
-// jam & menit cek otomatis tiap tanggal 1
-let RESELLER_TARGET_CHECK_HOUR = Number(
-  vars.RESELLER_TARGET_CHECK_HOUR || 1
-);
-let RESELLER_TARGET_CHECK_MINUTE = Number(
-  vars.RESELLER_TARGET_CHECK_MINUTE || 5
-);
-
-// supaya cek auto-downgrade cuma sekali per bulan
 let lastResellerTargetMonthKey = null;
 
-logger.info(
-  `Reseller target init: enabled=${RESELLER_TARGET_ENABLED}, ` +
-  `min30d=${RESELLER_TARGET_MIN_30D_ACCOUNTS}, ` +
-  `minDays=${RESELLER_TARGET_MIN_DAYS_PER_MONTH}, ` +
-  `time=${RESELLER_TARGET_CHECK_HOUR}:${String(
-    RESELLER_TARGET_CHECK_MINUTE
-  ).padStart(2, '0')}`
-);
 function updateResellerTargetVars(partial) {
   try {
     const varsPath = path.join(__dirname, '.vars.json');
@@ -670,14 +532,6 @@ function updateResellerTargetVars(partial) {
   }
 }
 
-
-// Tanggal kadaluarsa lisensi bot...
-let EXPIRE_DATE = vars.EXPIRE_DATE || null;
-
-// Timezone yang dipakai untuk tampilan jam/tanggal lisensi & scheduler
-let TIME_ZONE = vars.TIME_ZONE || 'Asia/Jayapura'; // default awal
-
-logger.info(`Time zone init: ${TIME_ZONE}`);
 
 // Helper: ambil tanggal & jam sesuai TIME_ZONE (bukan jam server)
 function getTimeInConfiguredTimeZone() {

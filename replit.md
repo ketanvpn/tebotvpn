@@ -12,12 +12,21 @@ A Telegram bot for automated VPN service management. Users can purchase VPN acco
 - **External VPN API**: AutoScript Potato API
 
 ## Project Structure
-- `app.js` — Main entry point (14,000+ lines): bot setup, all commands, schedulers, HTTP server
+- `app.js` — Main entry point (~14,000 lines): bot setup, all commands, schedulers, HTTP server
+- `config/logger.js` — Winston logger (shared across app)
+- `config/vars.js` — Reads `.vars.json` dan mengekspor semua konstanta konfigurasi
 - `modules/` — VPN account operations (create, renew, delete, lock/unlock, trial, change-ip, reseller)
 - `services/` — Payment integration (orderkuotaQris.js)
 - `.vars.json` — Configuration file (BOT_TOKEN, admin IDs, payment credentials, etc.)
 - `trial_config.json` — Trial access configuration
 - `sellvpn.db` — Main SQLite database (users, servers, transactions, accounts)
+
+## Refactoring Progress
+- **Tahap 1 ✅** — `config/logger.js` dan `config/vars.js` dipisah dari `app.js`
+- **Tahap 2 (todo)** — `helpers/index.js` — fungsi-fungsi kecil (parseRupiahInt, formatRupiah, dll)
+- **Tahap 3 (todo)** — `db/index.js` — koneksi & inisialisasi database
+- **Tahap 4 (todo)** — `handlers/admin.js` — semua command admin
+- **Tahap 5 (todo)** — `handlers/payment.js` — QRIS & topup (prioritas karena paling sering diubah)
 
 ## Configuration
 All configuration is in `.vars.json`. Required fields:
