@@ -15,6 +15,7 @@ A Telegram bot for automated VPN service management. Users can purchase VPN acco
 - `app.js` — Main entry point (~14,000 lines): bot setup, all commands, schedulers, HTTP server
 - `config/logger.js` — Winston logger (shared across app)
 - `config/vars.js` — Reads `.vars.json` dan mengekspor semua konstanta konfigurasi
+- `helpers/index.js` — Fungsi utilitas murni: sleep, rupiah, parseRupiahInt, mdToHtml, getAccountDaysLeft, parseKreditFromResponse, msgSuccess/Error/Info
 - `modules/` — VPN account operations (create, renew, delete, lock/unlock, trial, change-ip, reseller)
 - `services/` — Payment integration (orderkuotaQris.js)
 - `.vars.json` — Configuration file (BOT_TOKEN, admin IDs, payment credentials, etc.)
@@ -23,7 +24,7 @@ A Telegram bot for automated VPN service management. Users can purchase VPN acco
 
 ## Refactoring Progress
 - **Tahap 1 ✅** — `config/logger.js` dan `config/vars.js` dipisah dari `app.js`
-- **Tahap 2 (todo)** — `helpers/index.js` — fungsi-fungsi kecil (parseRupiahInt, formatRupiah, dll)
+- **Tahap 2 ✅** — `helpers/index.js` — fungsi utilitas murni (sleep, rupiah, parseRupiahInt, mdToHtml, dll)
 - **Tahap 3 (todo)** — `db/index.js` — koneksi & inisialisasi database
 - **Tahap 4 (todo)** — `handlers/admin.js` — semua command admin
 - **Tahap 5 (todo)** — `handlers/payment.js` — QRIS & topup (prioritas karena paling sering diubah)

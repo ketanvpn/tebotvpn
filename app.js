@@ -7,12 +7,17 @@ const axios = require('axios');
 const { isUserReseller, addReseller, removeReseller, listResellersSync } = require('./modules/reseller');
 
 const logger = require('./config/logger');
-
-
-// Helper sederhana untuk jeda (dipakai di broadcast)
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const {
+  sleep,
+  rupiah,
+  parseRupiahInt,
+  msgSuccess,
+  msgError,
+  msgInfo,
+  mdToHtml,
+  parseKreditFromResponse,
+  getAccountDaysLeft,
+} = require('./helpers');
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -561,31 +566,6 @@ function getTimeInConfiguredTimeZone() {
   return { dateKey, hour, minute };
 }
 
-// ===== Tambahan: helper sisa hari akun (berdasarkan TANGGAL, bukan jam) =====
-function getAccountDaysLeft(expiresAtMs) {
-  if (!expiresAtMs) return null; // kalau nggak ada expires_at
-
-  const now = new Date();
-  const todayStart = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  ).getTime();
-
-  const expDate = new Date(expiresAtMs);
-  const expDayStart = new Date(
-    expDate.getFullYear(),
-    expDate.getMonth(),
-    expDate.getDate()
-  ).getTime();
-
-  const diffDays = Math.round(
-    (expDayStart - todayStart) / (1000 * 60 * 60 * 24)
-  );
-
-  return diffDays;
-}
-// ===== Akhir helper =====
 
 // State sederhana untuk admin (edit nama / harga server)
 const adminState = {};
@@ -599,22 +579,6 @@ let lastBroadcastInfo = null;
 
 // Inisialisasi bot
 const bot = new Telegraf(BOT_TOKEN || 'placeholder:token_not_configured');
-
-// ==== Helper: konversi Markdown lama -> HTML aman ====
-function mdToHtml(text) {
-  if (text == null) return '';
-  let escaped = String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  // `code`
-  escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // *bold*
-  escaped = escaped.replace(/\*([^*]+)\*/g, '<b>$1</b>');
-
-  return escaped;
-}
 
 // Patch ctx.reply supaya semua parse_mode: 'Markdown' diubah ke HTML
 bot.use((ctx, next) => {
@@ -753,12 +717,6 @@ async function showErrorOnMenu(ctx, htmlText) {
 }
 
 // === Template pesan standar (HTML) ===
-function msgSuccess(t){ return `✅ <b>Berhasil</b>\n${t}`; }
-function msgError(t){ return `❌ <b>Gagal</b>\n${t}`; }
-function msgInfo(t){ return `ℹ️ <b>Info</b>\n${t}`; }
-function rupiah(n) {
-  return `Rp${Number(n || 0).toLocaleString('id-ID')}`;
-}
 
 async function getUserSaldo(db, userId) {
   return await new Promise((resolve) => {
@@ -1181,20 +1139,6 @@ let lastPollTime = 0;
 const POLL_INTERVAL = 10000;          // 10 detik (mirip temanmu)
 const DEPOSIT_EXPIRE_MS = 5 * 60 * 1000; // 5 menit
 
-function parseKreditFromResponse(text) {
-  // format dari temanmu: ada "Kredit: 10.123"
-  const blocks = String(text).split('------------------------').filter(Boolean);
-  const kredits = [];
-
-  for (const b of blocks) {
-    const m = b.match(/Kredit\s*:\s*([\d.]+)/);
-    if (!m) continue;
-    const val = parseInt(m[1].replace(/\./g, ''), 10);
-    if (!Number.isNaN(val)) kredits.push(val);
-  }
-
-  return kredits;
-}
 
 async function markDepositExpired(uniqueCode, bot, db, logger) {
   await new Promise((resolve) => {
@@ -10316,11 +10260,6 @@ async function markQrisStatus(id, status, paidAt = null) {
   });
 }
 
-function parseRupiahInt(v) {
-  if (typeof v === 'number') return Math.round(v);
-  if (!v) return 0;
-  return parseInt(String(v).replace(/[^\d]/g, ''), 10) || 0;
-}
 
 async function pollQrisPayments() {
   if (global.__pollQrisRunning) return;
