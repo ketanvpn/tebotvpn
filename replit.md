@@ -12,11 +12,12 @@ A Telegram bot for automated VPN service management. Users can purchase VPN acco
 - **External VPN API**: AutoScript Potato API
 
 ## Project Structure
-- `app.js` — Main entry point (~12,500 lines): bot setup, all commands, schedulers, HTTP server
+- `app.js` — Main entry point (~11,736 lines): bot setup, all commands, schedulers, HTTP server
 - `config/logger.js` — Winston logger (shared across app)
 - `config/vars.js` — Reads `.vars.json`, mengekspor semua konstanta konfigurasi + computed `ADMIN_IDS` array
 - `helpers/index.js` — Fungsi utilitas murni: sleep, rupiah, parseRupiahInt, mdToHtml, getAccountDaysLeft, parseKreditFromResponse, msgSuccess/Error/Info, `ensurePrivateChat`, `NO_ACCESS_MESSAGE`, `MASTER_ONLY_MESSAGE`
 - `handlers/admin.js` — 14 perintah admin modular via `register(bot, deps)`: /testgroup /lisensi /health /addhari /kuranghari /addsaldo /minsaldo /deluser /listuser /setflag /lastbroadcast /hapuslog /botstatus /helpadmin
+- `handlers/payment.js` — Handler QRIS & topup saldo modular via `register(bot, deps)` + ekspor `processDeposit`, `createQrisInvoice`: /cekqris, /topupqris, topupqris_btn, qris_auto_topup, qris_status:*, topup_saldo, gateway rajaserverpremium (processDeposit, createQrisInvoice, checkQRISStatus)
 - `modules/` — VPN account operations (create, renew, delete, lock/unlock, trial, change-ip, reseller)
 - `services/` — Payment integration (orderkuotaQris.js)
 - `db/index.js` — Koneksi SQLite tunggal, getUserSaldo, recordSaldoTransaction, CREATE TABLE
@@ -29,7 +30,7 @@ A Telegram bot for automated VPN service management. Users can purchase VPN acco
 - **Tahap 2 ✅** — `helpers/index.js` — fungsi utilitas murni (sleep, rupiah, parseRupiahInt, mdToHtml, dll)
 - **Tahap 3 ✅** — `db/index.js` — koneksi tunggal SQLite, semua CREATE TABLE, `getUserSaldo`, `recordSaldoTransaction`; 6 modul (create/del/lock/unlock/renew/trial) diperbarui ke `require('../db')`
 - **Tahap 4 ✅** — `handlers/admin.js` — 14 perintah admin (testgroup, lisensi, health, addhari, kuranghari, addsaldo, minsaldo, deluser, listuser, setflag, lastbroadcast, hapuslog, botstatus, helpadmin) dipindah via `register(bot, deps)`; `ensurePrivateChat`/`NO_ACCESS_MESSAGE`/`MASTER_ONLY_MESSAGE` pindah ke helpers; `ADMIN_IDS` computed di config/vars.js; app.js dikurangi ~1173 baris
-- **Tahap 5 (todo)** — `handlers/payment.js` — QRIS & topup (prioritas karena paling sering diubah)
+- **Tahap 5 ✅** — `handlers/payment.js` — /cekqris, /topupqris, topupqris_btn, qris_auto_topup, qris_status:*, topup_saldo, gateway rajaserverpremium (processDeposit, createQrisInvoice, checkQRISStatus + 6 helper fn); ekspor `processDeposit` & `createQrisInvoice` untuk state machine di app.js; app.js dikurangi ~764 baris (12500 → 11736)
 
 ## Configuration
 All configuration is in `.vars.json`. Required fields:
