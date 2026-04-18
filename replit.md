@@ -25,7 +25,7 @@ A Telegram bot for automated VPN service management. Users can purchase VPN acco
 ## Refactoring Progress
 - **Tahap 1 ✅** — `config/logger.js` dan `config/vars.js` dipisah dari `app.js`
 - **Tahap 2 ✅** — `helpers/index.js` — fungsi utilitas murni (sleep, rupiah, parseRupiahInt, mdToHtml, dll)
-- **Tahap 3 (todo)** — `db/index.js` — koneksi & inisialisasi database
+- **Tahap 3 ✅** — `db/index.js` — koneksi tunggal SQLite, semua CREATE TABLE, `getUserSaldo`, `recordSaldoTransaction`; 6 modul (create/del/lock/unlock/renew/trial) diperbarui ke `require('../db')`
 - **Tahap 4 (todo)** — `handlers/admin.js` — semua command admin
 - **Tahap 5 (todo)** — `handlers/payment.js` — QRIS & topup (prioritas karena paling sering diubah)
 

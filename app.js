@@ -1,5 +1,4 @@
 const os = require('os');
-const sqlite3 = require('sqlite3').verbose();
 const express = require('express');
 const { Telegraf } = require('telegraf');
 const app = express();
@@ -7,6 +6,7 @@ const axios = require('axios');
 const { isUserReseller, addReseller, removeReseller, listResellersSync } = require('./modules/reseller');
 
 const logger = require('./config/logger');
+const { db, getUserSaldo, recordSaldoTransaction } = require('./db');
 const {
   sleep,
   rupiah,
@@ -718,18 +718,9 @@ async function showErrorOnMenu(ctx, htmlText) {
 
 // === Template pesan standar (HTML) ===
 
-async function getUserSaldo(db, userId) {
-  return await new Promise((resolve) => {
-    db.get('SELECT saldo FROM users WHERE user_id = ?', [userId], (e, r) => {
-      if (e) return resolve(null);
-      resolve(r ? Number(r.saldo || 0) : null);
-    });
-  });
-}
-
-async function notifyTopupSuccess({ bot, db, userId, baseAmount, bonusAmount, percent, ref, method }) {
+async function notifyTopupSuccess({ bot, userId, baseAmount, bonusAmount, percent, ref, method }) {
   const total = Number(baseAmount || 0) + Number(bonusAmount || 0);
-  const saldoNow = await getUserSaldo(db, userId);
+  const saldoNow = await getUserSaldo(userId);
 
   // Nama user untuk notif grup (aman kalau gagal ambil)
   let who = `UID:${userId}`;
@@ -1098,33 +1089,6 @@ function restartAutoBackupScheduler() {
     logger.warn('Tidak bisa ambil username admin otomatis.');
   }
 })();
-/////
-const db = new sqlite3.Database('./sellvpn.db', (err) => {
-  if (err) {
-    logger.error('Kesalahan koneksi SQLite3:', err.message);
-  } else {
-    logger.info('Terhubung ke SQLite3');
-  }
-});
-
-// ============================================================================
-// SECTION: PAYMENT - DATABASE TABLES
-// - pending_deposits  : topup manual via QRIS
-// - qris_payments     : topup otomatis (OrderKuota QRIS)
-// ============================================================================
-db.run(`CREATE TABLE IF NOT EXISTS pending_deposits (
-  unique_code TEXT PRIMARY KEY,
-  user_id INTEGER,
-  amount INTEGER,
-  original_amount INTEGER,
-  timestamp INTEGER,
-  status TEXT,
-  qr_message_id INTEGER
-)`, (err) => {
-  if (err) {
-    logger.error('Kesalahan membuat tabel pending_deposits:', err.message);
-  }
-});
 
 // =================== AUTO TOPUP QRIS (MODEL MUTASI: pending_deposits) ===================
 
@@ -1317,220 +1281,6 @@ function startAutoTopupMutasi(bot, db, logger, axios) {
 
 // ============================================================================
 
-
-db.run(`CREATE TABLE IF NOT EXISTS Server (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  domain TEXT,
-  auth TEXT,
-  harga INTEGER,
-  nama_server TEXT,
-  quota INTEGER,
-  iplimit INTEGER,
-  batas_create_akun INTEGER,
-  total_create_akun INTEGER,
-  is_reseller_only INTEGER DEFAULT 0
-)`, (err) => {
-  if (err) {
-    logger.error('Kesalahan membuat tabel Server:', err.message);
-  } else {
-    logger.info('Server table created or already exists');
-  }
-});
-
-db.run("UPDATE Server SET total_create_akun = 0 WHERE total_create_akun IS NULL", function(err) {
-  if (err) {
-    logger.error('Error fixing NULL total_create_akun:', err.message);
-  } else {
-    if (this.changes > 0) {
-      logger.info(`✅ Fixed ${this.changes} servers with NULL total_create_akun`);
-    }
-  }
-});
-
-db.run(`CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER UNIQUE,
-  saldo INTEGER DEFAULT 0,
-  CONSTRAINT unique_user_id UNIQUE (user_id)
-)`, (err) => {
-  if (err) {
-    logger.error('Kesalahan membuat tabel users:', err.message);
-  } else {
-    logger.info('Users table created or already exists');
-  }
-});
-
-// Upgrade tabel users: tambahkan kolom flag_status dan flag_note jika belum ada
-db.get('SELECT flag_status FROM users LIMIT 1', (err, row) => {
-  if (err && err.message && err.message.includes('no such column')) {
-    logger.info('Menambahkan kolom flag_status dan flag_note ke tabel users...');
-
-    db.run(
-      "ALTER TABLE users ADD COLUMN flag_status TEXT DEFAULT 'NORMAL'",
-      (err2) => {
-        if (err2) {
-          logger.error('Kesalahan menambahkan kolom flag_status:', err2.message);
-        } else {
-          logger.info('Kolom flag_status berhasil ditambahkan ke tabel users');
-        }
-      }
-    );
-
-    db.run('ALTER TABLE users ADD COLUMN flag_note TEXT', (err3) => {
-      if (err3) {
-        logger.error('Kesalahan menambahkan kolom flag_note:', err3.message);
-      } else {
-        logger.info('Kolom flag_note berhasil ditambahkan ke tabel users');
-      }
-    });
-  }
-});
-
-
-db.run(`CREATE TABLE IF NOT EXISTS transactions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
-  amount INTEGER,
-  type TEXT,
-  reference_id TEXT,
-  timestamp INTEGER,
-  FOREIGN KEY (user_id) REFERENCES users(user_id)
-)`, (err) => {
-  if (err) {
-    logger.error('Kesalahan membuat tabel transactions:', err.message);
-  } else {
-    logger.info('Transactions table created or already exists');
-
-    // Add reference_id column if it doesn't exist
-    db.get("PRAGMA table_info(transactions)", (err, rows) => {
-      if (err) {
-        logger.error('Kesalahan memeriksa struktur tabel:', err.message);
-        return;
-      }
-
-      db.get("SELECT * FROM transactions WHERE reference_id IS NULL LIMIT 1", (err, row) => {
-        if (err && err.message.includes('no such column')) {
-          // Column doesn't exist, add it
-          db.run("ALTER TABLE transactions ADD COLUMN reference_id TEXT", (err) => {
-            if (err) {
-              logger.error('Kesalahan menambahkan kolom reference_id:', err.message);
-            } else {
-              logger.info('Kolom reference_id berhasil ditambahkan ke tabel transactions');
-            }
-          });
-        } else if (row) {
-          // Update existing transactions with reference_id
-          db.all("SELECT id, user_id, type, timestamp FROM transactions WHERE reference_id IS NULL", [], (err, rows) => {
-            if (err) {
-              logger.error('Kesalahan mengambil transaksi tanpa reference_id:', err.message);
-              return;
-            }
-
-            rows.forEach(row => {
-              const referenceId = `account-${row.type}-${row.user_id}-${row.timestamp}`;
-              db.run("UPDATE transactions SET reference_id = ? WHERE id = ?", [referenceId, row.id], (err) => {
-                if (err) {
-                  logger.error(`Kesalahan mengupdate reference_id untuk transaksi ${row.id}:`, err.message);
-                } else {
-                  logger.info(`Berhasil mengupdate reference_id untuk transaksi ${row.id}`);
-                }
-              });
-            });
-          });
-        }
-      });
-    });
-  }
-});
-
-function recordSaldoTransaction(userId, amount, type, referenceId) {
-  db.run(
-    `INSERT INTO transactions (user_id, amount, type, reference_id, timestamp)
-     VALUES (?, ?, ?, ?, ?)`,
-    [userId, amount, type, referenceId || null, Date.now()],
-    (err) => {
-      if (err) {
-        logger.error(
-          'Kesalahan mencatat transaksi saldo:',
-          err.message
-        );
-      }
-    }
-  );
-}
-
-db.run(`CREATE TABLE IF NOT EXISTS accounts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
-  username TEXT,
-  type TEXT,
-  server_id INTEGER,
-  created_at INTEGER,
-  expires_at INTEGER
-)`, (err) => {
-  if (err) {
-    logger.error('Kesalahan membuat tabel accounts:', err.message);
-  } else {
-    logger.info('Accounts table created or already exists');
-  }
-});
-
-// Buat index untuk mempercepat query yang sering dipakai
-db.run(
-  'CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id)',
-  (err) => {
-    if (err) {
-      logger.error(
-        'Kesalahan membuat index idx_users_user_id:',
-        err.message
-      );
-    } else {
-      logger.info('Index idx_users_user_id siap dipakai');
-    }
-  }
-);
-
-db.run(
-  'CREATE INDEX IF NOT EXISTS idx_tx_user_time ON transactions(user_id, timestamp)',
-  (err) => {
-    if (err) {
-      logger.error(
-        'Kesalahan membuat index idx_tx_user_time:',
-        err.message
-      );
-    } else {
-      logger.info('Index idx_tx_user_time siap dipakai');
-    }
-  }
-);
-
-db.run(
-  'CREATE INDEX IF NOT EXISTS idx_tx_type_time ON transactions(type, timestamp)',
-  (err) => {
-    if (err) {
-      logger.error(
-        'Kesalahan membuat index idx_tx_type_time:',
-        err.message
-      );
-    } else {
-      logger.info('Index idx_tx_type_time siap dipakai');
-    }
-  }
-);
-
-db.run(
-  'CREATE INDEX IF NOT EXISTS idx_accounts_user_time ON accounts(user_id, expires_at)',
-  (err) => {
-    if (err) {
-      logger.error(
-        'Kesalahan membuat index idx_accounts_user_time:',
-        err.message
-      );
-    } else {
-      logger.info('Index idx_accounts_user_time siap dipakai');
-    }
-  }
-);
 
 const adminTrialTemp = {}; // key: adminId, value: config trial sementara
 
@@ -10241,14 +9991,6 @@ const invoice = await createQrisInvoice(
   `Topup saldo user ${userId} (base=${baseAmount})`
 );
 
-async function getUserSaldo(userId) {
-  return await new Promise((resolve, reject) => {
-    db.get(`SELECT saldo FROM users WHERE user_id = ?`, [userId], (err, row) => {
-      if (err) return reject(err);
-      resolve(Number(row?.saldo || 0));
-    });
-  });
-}
 
 async function markQrisStatus(id, status, paidAt = null) {
   return await new Promise((resolve) => {
